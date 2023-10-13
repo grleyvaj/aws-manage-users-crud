@@ -2,6 +2,7 @@
 branch = true
 source = ["api", "tests"]
 
+
 [tool.coverage.report]
 exclude_lines = ['if TYPE_CHECKING:']
 show_missing = true
