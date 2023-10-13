@@ -1,0 +1,169 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: Sample SAM Template for aws-manage-users-crud
+
+Globals:
+    Function:
+        Tracing: Active
+        Runtime: python3.10
+        Timeout: 30
+
+Parameters:
+  APIStageName:
+    Default: dev
+    Description: StageName of API User deployment
+    Type: String
+  TableUserTest:
+    Default: users
+    Description: Table for storage users
+    Type: String
+
+Resources:
+  UserTestApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: UserTestApi
+      Description: API GATEWAY for manage users
+      StageName: !Ref APIStageName
+      Auth:
+        DefaultAuthorizer: MyUserCognitoAuthorizer
+  MyUserCognitoAuthorizer:
+    Type: AWS::ApiGateway::Authorizer
+    Properties:
+      Name: MyUserCognitoAuthorizer
+      RestApiId: !Ref UserTestApi
+      Type: COGNITO_USER_POOLS
+      ProviderARNs:
+        - !GetAtt UserTestCognitoUserPool.Arn
+      IdentitySource: method.request.header.Authorization
+  UserTestFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: UserTestFunction
+      Description: Lambda function for manage users
+      Handler: my_lambda/lambda_function.lambda_handler
+      Runtime: python3.10
+      Architectures:
+        - x86_64
+      CodeUri: api/
+      Events:
+        CreateUserApiEvent:
+          Type: Api
+          Properties:
+            Path: /users
+            Method: POST
+            RestApiId:
+              Ref: UserTestApi
+        ListUsersApiEvent:
+          Type: Api
+          Properties:
+            Path: /users
+            Method: GET
+            RestApiId:
+              Ref: UserTestApi
+      Policies:
+        - AmazonCognitoReadOnly
+        - DynamoDBCrudPolicy:
+            TableName: !Ref TableUserTest
+      Layers:
+        - !Sub arn:aws:lambda:${AWS::Region}:017000801446:layer:AWSLambdaPowertoolsPythonV2:42
+  BooksLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${UserTestFunction}'
+      RetentionInDays: 30
+  UserTestCognitoUserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: UserTestCognitoUserPool
+      AliasAttributes:
+        - email
+      AutoVerifiedAttributes:
+        - email
+      AccountRecoverySetting:
+        RecoveryMechanisms:
+          - Name: verified_email
+            Priority: 1
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: true
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: true
+          RequireUppercase: true
+      Schema:
+        - AttributeDataType: String
+          Name: name
+          Required: true
+        - AttributeDataType: String
+          Name: email
+          Required: true
+        - AttributeDataType: String
+          Name: family_name
+          Required: false
+        - AttributeDataType: String
+          Name: charge
+          Required: false
+        - AttributeDataType: String
+          Name: relational_admin
+          Required: false
+        - AttributeDataType: String
+          Name: type
+          Required: false
+      UsernameConfiguration:
+        CaseSensitive: false
+  UserTestPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      UserPoolId: !Ref UserTestCognitoUserPool
+      Domain: !Sub "user-test-${APIStageName}"
+  UserTestCognitoPoolClient:
+       Type: AWS::Cognito::UserPoolClient
+       Properties:
+           UserPoolId: !Ref UserTestCognitoUserPool
+           ClientName: UserTestCognitoPoolClient
+           GenerateSecret: true
+           RefreshTokenValidity: 30
+           PreventUserExistenceErrors: ENABLED
+           AllowedOAuthFlows:
+               - code
+           AllowedOAuthFlowsUserPoolClient: true
+           AllowedOAuthScopes:
+               - openid
+               - email
+           ExplicitAuthFlows:
+               - ALLOW_USER_PASSWORD_AUTH
+               - ALLOW_REFRESH_TOKEN_AUTH
+               - ALLOW_ADMIN_USER_PASSWORD_AUTH
+           CallbackURLs:
+             - https://webhook.site/c836419f-cf64-4fb3-83fe-4e9e6e8b5b0f
+  MySimpleUserTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: users
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        -
+          AttributeName: "user_id"
+          AttributeType: "S"
+        -
+          AttributeName: "email"
+          AttributeType: "S"
+      KeySchema:
+        -
+          AttributeName: "user_id"
+          KeyType: "HASH"
+      GlobalSecondaryIndexes:
+        - IndexName: "email-index"
+          KeySchema:
+            - AttributeName: "email"
+              KeyType: "HASH"
+          Projection:
+            ProjectionType: "ALL"
+
+Outputs:
+    UserTestApi:
+        Description: "API Gateway endpoint URL for Dev environment for Book Example Function"
+        Value: !Sub "https://${UserTestApi}.execute-api.${AWS::Region}.amazonaws.com/${APIStageName}/"

@@ -1,0 +1,13 @@
+{
+  "path": "/users",
+  "version": "1.0",
+  "httpMethod": "POST",
+  "requestContext": {
+    "authorizer": {
+      "claims": {
+        "client_id": "personal"
+      }
+    }
+  },
+  "body": "{\"email\":\"glorialj\",\"name\":\"Gloria\",\"last_name\":\"Leyva\",\"charge\":\"Dev\"}"
+}
